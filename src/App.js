@@ -25,6 +25,9 @@ function App() {
       {/* Header */}
       <div className="header">
         <h3>health contact</h3>
+        <h3>health contact</h3>
+        <h3>health contact</h3>
+        <h3>health contact</h3>
         <p>Your Gateway to Wellness</p>
       </div>
       {/* Form Card */}
