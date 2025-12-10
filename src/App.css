@@ -29,9 +29,11 @@ body {
 .card {
   background: white;
   width: 100%;
-  padding: 25px;
+  padding: 20px;
+  padding-left: 20px;
   border-radius: 16px;
   box-shadow: 0px 4px 20px rgba(0,0,0,0.15);
+  
 }
 
 .form-group {
