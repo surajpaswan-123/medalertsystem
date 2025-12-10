@@ -6,10 +6,11 @@ body {
 
 .container {
   width: 100%;
-  max-width: 450px;
+  max-width: 480px;
   margin: 0 auto;
   text-align: center;
   padding-bottom: 80px;
+   padding: 10px;
 }
 
 /* Header */
@@ -222,4 +223,14 @@ input {
   color: white;
   border-color: #1f6fd8;
   transform: scale(1.05);
+}
+
+@media (max-width: 450px) {
+  .container {
+    padding: 8px;
+  }
+
+  .feature-card, .choose-item {
+    width: 100%;
+  }
 }
