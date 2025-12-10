@@ -85,8 +85,10 @@ function App() {
         <div
           style={{
             position: "fixed",
-            bottom: "20px",
-            right: "20px",
+           top: "20px",
+           right: "20px",
+            bottom: "auto",
+
             background: "white",
             padding: "15px",
             borderRadius: "12px",
