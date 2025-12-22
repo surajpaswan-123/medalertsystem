@@ -3,14 +3,12 @@ body {
   font-family: "Poppins", sans-serif;
  background: linear-gradient(180deg, #f4f8f8 0%, #d1d2d2 60%, #efeeee 100%);
 }
-
 .container {
   width: 100%;
   max-width: 480px;
   margin: 0 auto;
   text-align: center;
-  padding-bottom: 80px;
-   padding: 10px;
+  padding: 10px 10px 80px;
 }
 
 /* Header */
@@ -109,14 +107,14 @@ input {
 .feature-card {
   background: rgb(238, 235, 235);
   padding: 20px;
-  width: 700PX;
+  width: 100%;
+  max-width: 700px;
   border-radius: 10px;
-  margin-top: 20px;
+  margin: 20px auto;
   text-align: left;
   position: relative;
-  margin-left: -50px;
-
 }
+
 
 .feature-card .icon {
   position: absolute;
@@ -224,13 +222,14 @@ input {
   border-color: #1f6fd8;
   transform: scale(1.05);
 }
-
-@media (max-width: 450px) {
-  .container {
-    padding: 8px;
+@media (max-width: 768px) {
+  .feature-card {
+    width: 100%;
+    margin: 15px auto;
   }
 
-  .feature-card, .choose-item {
-    width: 100%;
+  .choose-container {
+    flex-direction: column;
   }
 }
+ 
