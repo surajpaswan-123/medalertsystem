@@ -208,23 +208,23 @@ const handleDismissClick = () => {
 
         <h2 className="discover-title">Discover Health Connect</h2>
 
-        <div className="feature-card">
-          <h3>Seamless Appointments</h3>
-          <p>Easy booking, instant confirmations, and reminders.</p>
-          <div className="icon">📅</div>
-        </div>
+<div className="feature-card">
+  <h3>Dawai Li Ya Nahi?</h3>
+  <p>MedAlert puchta rahega jab tak tum loge nahi 😜</p>
+  <div className="icon">💊</div>
+</div>
 
-        <div className="feature-card">
-          <h3>Secure Health Data</h3>
-          <p>Encrypted records. Confidential. Anytime access.</p>
-          <div className="icon">🛡️</div>
-        </div>
+<div className="feature-card">
+  <h3>Phone Band, App Band?</h3>
+  <p>Reminder fir bhi bajega. Promise!</p>
+  <div className="icon">📢</div>
+</div>
 
-        <div className="feature-card">
-          <h3>Connect with Experts</h3>
-          <p>Find specialists, read reviews, book consultations.</p>
-          <div className="icon">👥</div>
-        </div>
+<div className="feature-card">
+  <h3>Maa Se Pehle Alert</h3>
+  <p>“Dawai le li?” — ab MedAlert bolega.</p>
+  <div className="icon">👩‍👦</div>
+</div>
 
         <footer className="footer">
           <a href="#">About Us</a> • <a href="#">Contact</a> • <a href="#">FAQ</a>
