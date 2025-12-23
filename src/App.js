@@ -78,6 +78,12 @@ function App() {
     setDeferredPrompt(null);
   };
 
+  // ✅ NEW: Dismiss handler
+const handleDismissClick = () => {
+  setShowInstallPopup(false);
+};
+
+
   return (
     <>
       {/* 🔥 INSTALL POPUP */}
@@ -113,6 +119,23 @@ function App() {
             }}
           >
             Install App
+          </button>
+
+          
+          {/* ❌ DISMISS BUTTON */}
+          <button
+            onClick={handleDismissClick}
+            style={{
+              padding: "10px 18px",
+              background: "#e0e0e0",
+              color: "#333",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontWeight: "bold"
+            }}
+          >
+            Dismiss
           </button>
         </div>
       )}
