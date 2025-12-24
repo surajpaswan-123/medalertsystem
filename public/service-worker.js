@@ -1,32 +1,44 @@
-/* ==============================
+/* ===============================
    MedAlert Service Worker
-   Background Reminder Notifications
+   Reliable Background Reminder
 ================================ */
 
-self.addEventListener("install", (event) => {
+self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
-self.addEventListener("activate", (event) => {
+self.addEventListener("activate", () => {
   self.clients.claim();
 });
 
-// 🔔 Receive reminder data from React
+// store reminders
+let reminders = [];
+
 self.addEventListener("message", (event) => {
-  if (event.data?.type === "SCHEDULE_REMINDER") {
-    const { medicineName, time } = event.data.payload;
-
-    const delay = new Date(time).getTime() - Date.now();
-
-    if (delay > 0) {
-      setTimeout(() => {
-        self.registration.showNotification("⏰ MedAlert Reminder", {
-          body: `Time to take: ${medicineName}`,
-          icon: "/logo192.png",
-          badge: "/logo192.png",
-          vibrate: [200, 100, 200],
-        });
-      }, delay);
-    }
+  if (event.data?.type === "ADD_REMINDERS") {
+    reminders = event.data.payload;
   }
 });
+
+// 🔁 check every 30 seconds
+setInterval(() => {
+  const now = new Date();
+  const currentDate = now.toISOString().split("T")[0];
+  const currentTime =
+    String(now.getHours()).padStart(2, "0") +
+    ":" +
+    String(now.getMinutes()).padStart(2, "0");
+
+  reminders.forEach((r) => {
+    if (!r.triggered && r.date === currentDate && r.time === currentTime) {
+      r.triggered = true;
+
+      self.registration.showNotification("⏰ MedAlert Reminder", {
+        body: `Time to take ${r.medicine}`,
+        icon: "/logo192.png",
+        badge: "/logo192.png",
+        vibrate: [300, 150, 300],
+      });
+    }
+  });
+}, 30000);

@@ -254,18 +254,26 @@ const handleSnooze = () => {
 
 
 
-    // 🔔 Send reminder to Service Worker
-if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
-  form.times.forEach((t) => {
-    const reminderDateTime = new Date(`${form.startDate}T${t}`);
 
-    navigator.serviceWorker.controller.postMessage({
-      type: "SCHEDULE_REMINDER",
-      payload: {
-        medicineName: form.medicineName,
-        time: reminderDateTime.toISOString(),
-      },
+
+
+
+
+if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+  const swReminders = [];
+
+  form.times.forEach((t) => {
+    swReminders.push({
+      medicine: form.medicineName,
+      date: form.startDate,
+      time: t,
+      triggered: false,
     });
+  });
+
+  navigator.serviceWorker.controller.postMessage({
+    type: "ADD_REMINDERS",
+    payload: swReminders,
   });
 }
 
