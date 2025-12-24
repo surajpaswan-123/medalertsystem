@@ -3,6 +3,12 @@ import "./Patient.css";
 const STORAGE_KEY = "medalert_allSchedules";
 function AutoSchedule() {
 // pwa install button logic
+
+   useEffect(() => {
+  if ("Notification" in window) {
+    Notification.requestPermission();
+  }
+}, []);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
 const [showInstallButton, setShowInstallButton] = useState(false);
 
@@ -203,6 +209,7 @@ const handleSnooze = () => {
 
   // ADD SCHEDULE
   const generateSchedule = () => {
+
     if (!form.medicineName || !form.startDate) return alert("Fill details");
     if (form.times.includes("")) return alert("Fill all times");
 
@@ -244,6 +251,25 @@ const handleSnooze = () => {
     });
 
     setScanImage(null);
+
+
+
+    // 🔔 Send reminder to Service Worker
+if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+  form.times.forEach((t) => {
+    const reminderDateTime = new Date(`${form.startDate}T${t}`);
+
+    navigator.serviceWorker.controller.postMessage({
+      type: "SCHEDULE_REMINDER",
+      payload: {
+        medicineName: form.medicineName,
+        time: reminderDateTime.toISOString(),
+      },
+    });
+  });
+}
+
+
   };
 
 
