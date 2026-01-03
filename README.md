@@ -13,6 +13,22 @@
 - 📅 **Multi-day Scheduling** - Set reminders for multiple days
 - 💾 **Offline Support** - Works without internet connection
 
+## ⚠️ Important: App Close Behavior
+
+### ✅ What Works When App is Closed:
+- **Browser Notification** - 100% reliable
+- **System Notification Sound** - Your phone's default notification sound
+- **Vibration** - Strong vibration pattern
+- **Snooze Button** - Works from notification
+
+### ❌ What Doesn't Work When App is Closed:
+- **Custom Alarm Sound** - Browser security prevents background audio
+- **In-App Popup** - Only works when app is open
+
+**📖 For detailed explanation, see [APP_CLOSE_BEHAVIOR.md](./APP_CLOSE_BEHAVIOR.md)**
+
+**💡 Recommendation:** Keep browser open in background (minimized) for best experience. For critical reminders, keep app open.
+
 ## 🛠️ Installation
 
 ```bash
@@ -62,15 +78,19 @@ This creates an optimized production build in the `build` folder.
    ```
 6. **Wait for alarm** - You'll get:
    - Browser notification
-   - Popup with medicine details
-   - Alarm sound playing
+   - Popup with medicine details (if app is open)
+   - Alarm sound playing (if app is open)
+   - System notification sound (if app is closed)
 
 ### Testing Background Alarms:
 
 1. Set a reminder 5 minutes from now
-2. **Close the browser tab** (or minimize)
+2. **Minimize the browser** (don't close completely)
 3. Wait for the scheduled time
-4. You should receive a **browser notification** even with tab closed
+4. You should receive:
+   - **Browser notification** with medicine name
+   - **System notification sound**
+   - **Vibration** (on mobile)
 5. Click notification to open the app
 
 ### Common Issues & Solutions:
@@ -103,6 +123,10 @@ This creates an optimized production build in the `build` folder.
    - Keep console open to see what's happening
    - Look for error messages in red
 
+6. **Browser Must Be Open**:
+   - Browser should be running (can be minimized)
+   - If browser is completely closed, notifications won't work
+
 #### 🔧 Force Service Worker Update:
 
 ```javascript
@@ -134,13 +158,24 @@ navigator.serviceWorker.getRegistrations().then(registrations => {
 
 1. **In-App Alarm** (when app is open):
    - Checks every 30 seconds
-   - Shows popup with sound
+   - Shows popup with medicine image
+   - Plays custom alarm sound
    - Snooze functionality
 
 2. **Service Worker Alarm** (background):
    - Checks every 15 seconds
    - Sends browser notifications
-   - Works even when app is closed
+   - Plays system notification sound
+   - Works when app is minimized
+
+### What You Get in Different Scenarios:
+
+| Scenario | Notification | Custom Sound | System Sound | Vibration | Popup |
+|----------|-------------|--------------|--------------|-----------|-------|
+| App Open | ✅ | ✅ | ✅ | ✅ | ✅ |
+| App Minimized | ✅ | ❌ | ✅ | ✅ | ❌ |
+| App Closed (Browser Open) | ✅ | ❌ | ✅ | ✅ | ❌ |
+| Browser Closed | ❌ | ❌ | ❌ | ❌ | ❌ |
 
 ### Architecture:
 
@@ -155,7 +190,8 @@ Service Worker checks every 15s
         ↓
 Triggers notification at scheduled time
         ↓
-Plays alarm sound when app opens
+System sound plays (always)
+Custom sound plays (only if app open)
 ```
 
 ## 🐛 Debugging
@@ -167,6 +203,7 @@ All important events are logged to console:
 - 📝 Reminders received
 - ⏰ Time checks
 - 🔔 Alarm triggers
+- 📱 App open/close status
 
 ### Check Service Worker:
 
@@ -186,9 +223,25 @@ console.log(JSON.parse(localStorage.getItem('medalert_allSchedules')));
 
 ## 📋 Requirements
 
-- Modern browser with Service Worker support
+- Modern browser with Service Worker support (Chrome, Firefox, Edge, Safari)
 - Notification permissions enabled
 - JavaScript enabled
+- Browser must be running (can be minimized)
+
+## 💡 Best Practices
+
+### For Reliable Alarms:
+1. ✅ **Install as PWA** for better background support
+2. ✅ **Keep browser open** (minimized is fine)
+3. ✅ **Allow notifications** when prompted
+4. ✅ **Enable system notification sound** in phone settings
+5. ✅ **Disable Do Not Disturb** mode during medicine time
+6. ✅ **For critical reminders**, keep app open
+
+### For Custom Alarm Sound:
+- Keep the app tab open (can minimize browser)
+- Don't close the tab completely
+- Or install as PWA and keep it running
 
 ## 🤝 Contributing
 
@@ -209,6 +262,13 @@ If alarms still don't work after following all steps:
 2. Try in incognito/private mode
 3. Test in different browser (Chrome recommended)
 4. Make sure system notifications are enabled
+5. Verify browser is running in background
+6. Read [APP_CLOSE_BEHAVIOR.md](./APP_CLOSE_BEHAVIOR.md) for detailed explanation
+
+## 📚 Additional Documentation
+
+- [ALARM_FIX_SUMMARY.md](./ALARM_FIX_SUMMARY.md) - Technical details of alarm fixes
+- [APP_CLOSE_BEHAVIOR.md](./APP_CLOSE_BEHAVIOR.md) - Detailed explanation of app behavior when closed
 
 ---
 
