@@ -4,13 +4,16 @@ import "./Patient.css";
 const STORAGE_KEY = "medalert_allSchedules";
 
 function AutoSchedule() {
-  // PWA install button logic
+  // Request notification permission on load
   useEffect(() => {
-    if ("Notification" in window) {
-      Notification.requestPermission();
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().then(permission => {
+        console.log("Notification permission:", permission);
+      });
     }
   }, []);
 
+  // PWA install button logic
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallButton, setShowInstallButton] = useState(false);
 
@@ -37,16 +40,21 @@ function AutoSchedule() {
     setShowInstallButton(false);
 
     // Register periodic background sync after install
-    if ("serviceWorker" in navigator && "periodicSync" in self.registration) {
-      try {
-        const registration = await navigator.serviceWorker.ready;
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      
+      if ("periodicSync" in registration) {
         await registration.periodicSync.register("check-reminders", {
           minInterval: 15 * 60 * 1000, // 15 minutes
         });
         console.log("✅ Periodic sync registered!");
-      } catch (error) {
-        console.log("⚠️ Periodic sync not supported:", error);
+        alert("✅ App installed! Background reminders enabled.");
+      } else {
+        console.log("⚠️ Periodic sync not supported");
+        alert("✅ App installed! (Note: Background sync not supported on this browser)");
       }
+    } catch (error) {
+      console.log("⚠️ Periodic sync error:", error);
     }
   };
 
@@ -149,7 +157,7 @@ function AutoSchedule() {
     // Also save to Service Worker IndexedDB
     if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
       const reminderDateTime = new Date(`${newDate}T${hh}:${mm}`);
-      
+
       navigator.serviceWorker.controller.postMessage({
         type: "SAVE_REMINDER",
         payload: {
@@ -159,6 +167,8 @@ function AutoSchedule() {
           triggered: false,
         },
       });
+
+      console.log("✅ Snoozed reminder saved to Service Worker");
     }
 
     // Smooth close animation
@@ -223,10 +233,48 @@ function AutoSchedule() {
     setForm({ ...form, times: arr });
   };
 
+  // Helper function to send message to Service Worker
+  const sendToServiceWorker = (message) => {
+    return new Promise((resolve, reject) => {
+      if (!("serviceWorker" in navigator) || !navigator.serviceWorker.controller) {
+        reject(new Error("Service Worker not available"));
+        return;
+      }
+
+      const messageChannel = new MessageChannel();
+      
+      messageChannel.port1.onmessage = (event) => {
+        if (event.data.success) {
+          resolve(event.data);
+        } else {
+          reject(new Error(event.data.error || "Unknown error"));
+        }
+      };
+
+      navigator.serviceWorker.controller.postMessage(message, [messageChannel.port2]);
+    });
+  };
+
   // ADD SCHEDULE
   const generateSchedule = async () => {
-    if (!form.medicineName || !form.startDate) return alert("Fill details");
-    if (form.times.includes("")) return alert("Fill all times");
+    if (!form.medicineName || !form.startDate) {
+      alert("Please fill medicine name and start date");
+      return;
+    }
+    
+    if (form.times.includes("")) {
+      alert("Please fill all time slots");
+      return;
+    }
+
+    // Check notification permission
+    if (Notification.permission !== "granted") {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        alert("⚠️ Please allow notifications to receive reminders!");
+        return;
+      }
+    }
 
     const reminders = [];
     const start = new Date(form.startDate);
@@ -254,38 +302,57 @@ function AutoSchedule() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
 
     // 🔔 Send ALL reminders to Service Worker IndexedDB
-    if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
-      for (let d = 0; d < form.numberOfDays; d++) {
-        const date = new Date(start);
-        date.setDate(date.getDate() + d);
-        const dateStr = date.toISOString().split("T")[0];
+    let savedCount = 0;
+    let failedCount = 0;
 
-        for (const t of form.times) {
-          const reminderDateTime = new Date(`${dateStr}T${t}`);
+    for (let d = 0; d < form.numberOfDays; d++) {
+      const date = new Date(start);
+      date.setDate(date.getDate() + d);
+      const dateStr = date.toISOString().split("T")[0];
 
-          navigator.serviceWorker.controller.postMessage({
+      for (const t of form.times) {
+        const reminderDateTime = new Date(`${dateStr}T${t}`);
+        const reminderId = `${item.id}_${dateStr}_${t.replace(":", "")}`;
+
+        try {
+          await sendToServiceWorker({
             type: "SAVE_REMINDER",
             payload: {
-              id: `${item.id}_${dateStr}_${t}`,
+              id: reminderId,
               medicineName: form.medicineName,
               datetime: reminderDateTime.toISOString(),
               triggered: false,
             },
           });
+          
+          savedCount++;
+          console.log(`✅ Saved reminder ${savedCount}:`, reminderId);
+          
+        } catch (error) {
+          failedCount++;
+          console.error(`❌ Failed to save reminder:`, error);
         }
       }
+    }
 
-      // Trigger immediate check
+    // Trigger immediate check
+    if (navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({
         type: "CHECK_NOW",
       });
-
-      alert("✅ Reminder saved! Will work even when app is closed.");
     }
 
+    // Show success message
+    if (savedCount > 0) {
+      alert(`✅ ${savedCount} reminder(s) saved!\n\nReminders will work even when app is closed.\n\nCheck browser console for Service Worker logs.`);
+    } else {
+      alert(`⚠️ Failed to save reminders to Service Worker.\n\nPlease check:\n1. Service Worker is registered\n2. Browser console for errors`);
+    }
+
+    // Reset form
     setForm({
       medicineName: "",
-      numberOfDays: 3,
+      numberOfDays: 1,
       startDate: "",
       timesPerDay: form.timesPerDay,
       times: Array(form.timesPerDay).fill(""),
@@ -296,23 +363,29 @@ function AutoSchedule() {
   };
 
   // DELETE MEDICINE
-  const deleteMedicine = (id) => {
+  const deleteMedicine = async (id) => {
     const medicine = allSchedules.find((m) => m.id === id);
-    
+
     // Delete from localStorage
     const updated = allSchedules.filter((m) => m.id !== id);
     setAllSchedules(updated);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
 
     // Delete from Service Worker IndexedDB
-    if ("serviceWorker" in navigator && navigator.serviceWorker.controller && medicine) {
-      medicine.reminders.forEach((r) => {
-        const reminderId = `${id}_${r.date}_${r.time}`;
-        navigator.serviceWorker.controller.postMessage({
-          type: "DELETE_REMINDER",
-          payload: reminderId,
-        });
-      });
+    if (medicine && navigator.serviceWorker.controller) {
+      for (const r of medicine.reminders) {
+        const reminderId = `${id}_${r.date}_${r.time.replace(":", "")}`;
+        
+        try {
+          await sendToServiceWorker({
+            type: "DELETE_REMINDER",
+            payload: reminderId,
+          });
+          console.log("✅ Deleted reminder from SW:", reminderId);
+        } catch (error) {
+          console.error("❌ Failed to delete reminder:", error);
+        }
+      }
     }
   };
 
@@ -340,7 +413,7 @@ function AutoSchedule() {
           }
         })
       );
-    }, 60000); // Check every minute
+    }, 30000); // Check every 30 seconds
 
     return () => clearInterval(it);
   }, [allSchedules]);
@@ -359,6 +432,8 @@ function AutoSchedule() {
             borderRadius: "8px",
             marginBottom: "15px",
             cursor: "pointer",
+            fontSize: "16px",
+            fontWeight: "bold",
           }}
         >
           📲 Install MedAlert App
@@ -458,7 +533,7 @@ function AutoSchedule() {
             type="number"
             name="numberOfDays"
             value={form.numberOfDays}
-            onChange={(e) => setForm({ ...form, numberOfDays: e.target.value })}
+            onChange={(e) => setForm({ ...form, numberOfDays: parseInt(e.target.value) })}
           />
         </div>
 
@@ -524,6 +599,7 @@ function AutoSchedule() {
                     <div key={idx} className="reminder-row">
                       <span>{r.date}</span>
                       <span>{r.time}</span>
+                      <span>{r.triggered ? "✅" : "⏰"}</span>
                     </div>
                   ))}
                 </div>
