@@ -8,57 +8,16 @@ function AutoSchedule() {
     if ("Notification" in window) {
       Notification.requestPermission().then(permission => {
         console.log("📢 Notification permission:", permission);
-        if (permission !== "granted") {
-          alert("⚠️ Please allow notifications for reminders to work!");
-        }
       });
     }
 
-    // Service Worker ready check and sync
+    // Service Worker ready check
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready.then((registration) => {
+      navigator.serviceWorker.ready.then(() => {
         console.log("✅ Service Worker is ready!");
-        
-        // Sync all existing reminders with Service Worker on load
-        syncRemindersWithServiceWorker();
       });
     }
   }, []);
-
-  // Sync all reminders with Service Worker
-  const syncRemindersWithServiceWorker = async () => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return;
-
-    const schedules = JSON.parse(saved);
-    const allReminders = [];
-
-    schedules.forEach(schedule => {
-      schedule.reminders.forEach(reminder => {
-        allReminders.push({
-          medicine: schedule.medicineName,
-          date: reminder.date,
-          time: reminder.time,
-          triggered: reminder.triggered || false
-        });
-      });
-    });
-
-    if (allReminders.length > 0 && 'serviceWorker' in navigator) {
-      try {
-        const registration = await navigator.serviceWorker.ready;
-        if (registration.active) {
-          registration.active.postMessage({
-            type: "ADD_REMINDERS",
-            payload: allReminders
-          });
-          console.log(`✅ Synced ${allReminders.length} reminders with Service Worker`);
-        }
-      } catch (error) {
-        console.error("❌ Error syncing with Service Worker:", error);
-      }
-    }
-  };
 
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallButton, setShowInstallButton] = useState(false);
@@ -138,30 +97,14 @@ function AutoSchedule() {
   // Listen for Service Worker messages
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      const messageHandler = (event) => {
+      navigator.serviceWorker.addEventListener('message', (event) => {
         if (event.data?.type === 'PLAY_ALARM') {
           console.log("🔔 Received alarm trigger from Service Worker");
-          const medicineName = event.data.medicine;
-          
-          // Find the medicine details
-          const medicine = allSchedules.find(m => m.medicineName === medicineName);
-          
-          setPopupReminder({
-            medicineName: medicineName,
-            imageUrl: medicine?.imageUrl || null,
-          });
-          
           playTone();
         }
-      };
-
-      navigator.serviceWorker.addEventListener('message', messageHandler);
-
-      return () => {
-        navigator.serviceWorker.removeEventListener('message', messageHandler);
-      };
+      });
     }
-  }, [allSchedules]);
+  }, []);
 
   // AUDIO CONTROLS
   const playTone = () => {
@@ -172,15 +115,14 @@ function AutoSchedule() {
 
     audio.play()
       .then(() => setIsTestPlaying(true))
-      .catch((err) => {
-        console.log("Audio play failed:", err);
-        // Try again with user interaction
+      .catch(() => {
+        alert("Please tap OK to allow sound");
         audio.play();
       });
   };
 
   // ⏳ SNOOZE – delay reminder by 5 minutes
-  const handleSnooze = async () => {
+  const handleSnooze = () => {
     if (!popupReminder) return;
 
     // Current time + 5 minutes
@@ -213,8 +155,7 @@ function AutoSchedule() {
 
     // Send snoozed reminder to Service Worker
     if ("serviceWorker" in navigator) {
-      try {
-        const registration = await navigator.serviceWorker.ready;
+      navigator.serviceWorker.ready.then((registration) => {
         if (registration.active) {
           registration.active.postMessage({
             type: "ADD_REMINDERS",
@@ -227,9 +168,7 @@ function AutoSchedule() {
           });
           console.log("📤 Snoozed reminder sent to Service Worker");
         }
-      } catch (error) {
-        console.error("❌ Error sending snooze to Service Worker:", error);
-      }
+      });
     }
 
     // Smooth close animation
@@ -295,7 +234,7 @@ function AutoSchedule() {
   };
 
   // ADD SCHEDULE
-  const generateSchedule = async () => {
+  const generateSchedule = () => {
     if (!form.medicineName || !form.startDate) return alert("Fill details");
     if (form.times.includes("")) return alert("Fill all times");
 
@@ -324,10 +263,9 @@ function AutoSchedule() {
     setAllSchedules(updated);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
 
-    // Send ALL reminders to Service Worker
+    // Send ALL reminders to Service Worker (improved)
     if ("serviceWorker" in navigator) {
-      try {
-        const registration = await navigator.serviceWorker.ready;
+      navigator.serviceWorker.ready.then((registration) => {
         const swReminders = [];
 
         // Send all reminders for all days
@@ -352,12 +290,10 @@ function AutoSchedule() {
             payload: swReminders,
           });
           console.log("📤 Sent reminders to Service Worker:", swReminders);
-          alert(`✅ ${form.medicineName} reminders set successfully!`);
         }
-      } catch (err) {
+      }).catch(err => {
         console.error("❌ Service Worker not ready:", err);
-        alert("⚠️ Reminders saved locally, but Service Worker sync failed. Please refresh the page.");
-      }
+      });
     }
 
     setForm({
@@ -377,12 +313,9 @@ function AutoSchedule() {
     const updated = allSchedules.filter((m) => m.id !== id);
     setAllSchedules(updated);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    
-    // Re-sync with Service Worker
-    syncRemindersWithServiceWorker();
   };
 
-  // REMINDER CHECK (runs every 30 seconds for better reliability when app is open)
+  // REMINDER CHECK (runs every 30 seconds for better reliability)
   useEffect(() => {
     const it = setInterval(() => {
       const now = new Date();
@@ -392,7 +325,7 @@ function AutoSchedule() {
       const mm = String(now.getMinutes()).padStart(2, "0");
       const currentTime = `${hh}:${mm}`;
 
-      console.log(`⏰ [App] Checking reminders at ${currentTime}`);
+      console.log(`⏰ Checking reminders at ${currentTime}`);
 
       allSchedules.forEach((m) =>
         m.reminders.forEach((r) => {
@@ -400,7 +333,7 @@ function AutoSchedule() {
 
           if (r.date === currentDate && reminderTime === currentTime && !r.triggered) {
             r.triggered = true;
-            console.log(`🔔 [App] Triggering reminder for ${m.medicineName}`);
+            console.log(`🔔 Triggering reminder for ${m.medicineName}`);
             setPopupReminder({
               medicineName: m.medicineName,
               imageUrl: m.imageUrl,
