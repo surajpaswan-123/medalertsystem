@@ -25,6 +25,8 @@
   "categories": ["health", "medical", "productivity"],
   "prefer_related_applications": false,
   "permissions": [
-    "notifications"
+    "notifications",
+    "background-sync",
+    "periodic-background-sync"
   ]
 }
