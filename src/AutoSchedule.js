@@ -1,59 +1,69 @@
 import React, { useState, useEffect } from "react";
 import "./Patient.css";
+
 const STORAGE_KEY = "medalert_allSchedules";
+
 function AutoSchedule() {
-// pwa install button logic
+  // PWA install button logic
+  useEffect(() => {
+    if ("Notification" in window) {
+      Notification.requestPermission();
+    }
+  }, []);
 
-   useEffect(() => {
-  if ("Notification" in window) {
-    Notification.requestPermission();
-  }
-}, []);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
-const [showInstallButton, setShowInstallButton] = useState(false);
+  const [showInstallButton, setShowInstallButton] = useState(false);
 
-useEffect(() => {
-  const handler = (e) => {
-    e.preventDefault();
-    setDeferredPrompt(e);
-    setShowInstallButton(true);
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallButton(true);
+    };
+
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!deferredPrompt) return;
+
+    deferredPrompt.prompt();
+    const choiceResult = await deferredPrompt.userChoice;
+
+    console.log("User clicked:", choiceResult.outcome);
+
+    setDeferredPrompt(null);
+    setShowInstallButton(false);
+
+    // Register periodic background sync after install
+    if ("serviceWorker" in navigator && "periodicSync" in self.registration) {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        await registration.periodicSync.register("check-reminders", {
+          minInterval: 15 * 60 * 1000, // 15 minutes
+        });
+        console.log("✅ Periodic sync registered!");
+      } catch (error) {
+        console.log("⚠️ Periodic sync not supported:", error);
+      }
+    }
   };
 
-  window.addEventListener("beforeinstallprompt", handler);
-
-  return () => window.removeEventListener("beforeinstallprompt", handler);
-}, []);
-
-const handleInstallApp = async () => {
-  if (!deferredPrompt) return;
-
-  deferredPrompt.prompt();
-  const choiceResult = await deferredPrompt.userChoice;
-
-  console.log("User clicked:", choiceResult.outcome);
-
-  setDeferredPrompt(null);
-  setShowInstallButton(false);
-};
   function normalizeTime(t) {
     if (!t) return "";
-    if (t.length === 5) return t;          
+    if (t.length === 5) return t;
     if (t.length === 8) return t.slice(0, 5);
     const date = new Date("1970-01-01 " + t);
     const hh = String(date.getHours()).padStart(2, "0");
     const mm = String(date.getMinutes()).padStart(2, "0");
     return `${hh}:${mm}`;
   }
+
   // STATES
-
-
-
-
   const [popupReminder, setPopupReminder] = useState(null);
   const [isTestPlaying, setIsTestPlaying] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
-
-
 
   const [systemTones] = useState([
     { id: "tone1", label: "Soft Beep", src: "/tone1.mp3" },
@@ -71,12 +81,9 @@ const handleInstallApp = async () => {
     medicineName: "",
     numberOfDays: 1,
     startDate: "",
-    timesPerDay:1,
+    timesPerDay: 1,
     times: [""],
     imageUrl: null,
-   
-
-
   });
 
   const [allSchedules, setAllSchedules] = useState([]);
@@ -91,7 +98,6 @@ const handleInstallApp = async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(allSchedules));
   }, [allSchedules]);
 
-
   // AUDIO CONTROLS
   const playTone = () => {
     const audio = document.getElementById("tone-player");
@@ -99,58 +105,71 @@ const handleInstallApp = async () => {
     audio.muted = false;
     audio.currentTime = 0;
 
-    audio.play()
+    audio
+      .play()
       .then(() => setIsTestPlaying(true))
       .catch(() => {
         alert("Please tap OK to allow sound");
         audio.play();
       });
   };
-     
 
-   // ⏳ SNOOZE – delay reminder by 5 minutes
-const handleSnooze = () => {
-  if (!popupReminder) return;
+  // ⏳ SNOOZE – delay reminder by 5 minutes
+  const handleSnooze = async () => {
+    if (!popupReminder) return;
 
-  // Current time + 5 minutes
-  const now = new Date();
-  now.setMinutes(now.getMinutes() + 5);
+    // Current time + 5 minutes
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 5);
 
-  const newDate = now.toISOString().split("T")[0];
-  const hh = String(now.getHours()).padStart(2, "0");
-  const mm = String(now.getMinutes()).padStart(2, "0");
+    const newDate = now.toISOString().split("T")[0];
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
 
-  const snoozedReminder = {
-    date: newDate,
-    time: `${hh}:${mm}`,
-    triggered: false,
-  };
+    const snoozedReminder = {
+      date: newDate,
+      time: `${hh}:${mm}`,
+      triggered: false,
+    };
 
-  // Add new reminder in correct medicine
-  const updated = allSchedules.map((med) => {
-    if (med.medicineName === popupReminder.medicineName) {
-      return {
-        ...med,
-        reminders: [...med.reminders, snoozedReminder],
-      };
+    // Add new reminder in correct medicine
+    const updated = allSchedules.map((med) => {
+      if (med.medicineName === popupReminder.medicineName) {
+        return {
+          ...med,
+          reminders: [...med.reminders, snoozedReminder],
+        };
+      }
+      return med;
+    });
+
+    setAllSchedules(updated);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+
+    // Also save to Service Worker IndexedDB
+    if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+      const reminderDateTime = new Date(`${newDate}T${hh}:${mm}`);
+      
+      navigator.serviceWorker.controller.postMessage({
+        type: "SAVE_REMINDER",
+        payload: {
+          id: `snooze_${Date.now()}`,
+          medicineName: popupReminder.medicineName,
+          datetime: reminderDateTime.toISOString(),
+          triggered: false,
+        },
+      });
     }
-    return med;
-  });
 
-  setAllSchedules(updated);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    // Smooth close animation
+    setIsClosing(true);
+    stopTone();
 
-  // Smooth close animation
-  setIsClosing(true);
-  stopTone();
-
-  setTimeout(() => {
-    setPopupReminder(null);
-    setIsClosing(false);
-  }, 200);
-};
-
-
+    setTimeout(() => {
+      setPopupReminder(null);
+      setIsClosing(false);
+    }, 200);
+  };
 
   const stopTone = () => {
     const audio = document.getElementById("tone-player");
@@ -165,7 +184,6 @@ const handleSnooze = () => {
     else playTone();
   };
 
-
   // IMAGE HANDLERS
   const handleScan = (e) => {
     const file = e.target.files[0];
@@ -175,7 +193,7 @@ const handleSnooze = () => {
     setForm((prev) => ({
       ...prev,
       imageUrl: url,
-      medicineName: prev.medicineName || "Scanned Medicine"
+      medicineName: prev.medicineName || "Scanned Medicine",
     }));
   };
 
@@ -193,7 +211,6 @@ const handleSnooze = () => {
     setCustomTone({ id: "custom", label: "My Tone", src: url });
   };
 
-
   // FORM HANDLING
   const handleTimesPerDay = (e) => {
     const val = parseInt(e.target.value);
@@ -206,10 +223,8 @@ const handleSnooze = () => {
     setForm({ ...form, times: arr });
   };
 
-
   // ADD SCHEDULE
-  const generateSchedule = () => {
-
+  const generateSchedule = async () => {
     if (!form.medicineName || !form.startDate) return alert("Fill details");
     if (form.times.includes("")) return alert("Fill all times");
 
@@ -226,9 +241,6 @@ const handleSnooze = () => {
         reminders.push({ date: dateStr, time: t, triggered: false });
       });
     }
-    
-
- 
 
     const item = {
       id: Date.now(),
@@ -241,6 +253,36 @@ const handleSnooze = () => {
     setAllSchedules(updated);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
 
+    // 🔔 Send ALL reminders to Service Worker IndexedDB
+    if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
+      for (let d = 0; d < form.numberOfDays; d++) {
+        const date = new Date(start);
+        date.setDate(date.getDate() + d);
+        const dateStr = date.toISOString().split("T")[0];
+
+        for (const t of form.times) {
+          const reminderDateTime = new Date(`${dateStr}T${t}`);
+
+          navigator.serviceWorker.controller.postMessage({
+            type: "SAVE_REMINDER",
+            payload: {
+              id: `${item.id}_${dateStr}_${t}`,
+              medicineName: form.medicineName,
+              datetime: reminderDateTime.toISOString(),
+              triggered: false,
+            },
+          });
+        }
+      }
+
+      // Trigger immediate check
+      navigator.serviceWorker.controller.postMessage({
+        type: "CHECK_NOW",
+      });
+
+      alert("✅ Reminder saved! Will work even when app is closed.");
+    }
+
     setForm({
       medicineName: "",
       numberOfDays: 3,
@@ -251,37 +293,30 @@ const handleSnooze = () => {
     });
 
     setScanImage(null);
-
-
-
-    // 🔔 Send reminder to Service Worker
-if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
-  form.times.forEach((t) => {
-    const reminderDateTime = new Date(`${form.startDate}T${t}`);
-
-    navigator.serviceWorker.controller.postMessage({
-      type: "SCHEDULE_REMINDER",
-      payload: {
-        medicineName: form.medicineName,
-        time: reminderDateTime.toISOString(),
-      },
-    });
-  });
-}
-
-
   };
-
 
   // DELETE MEDICINE
   const deleteMedicine = (id) => {
+    const medicine = allSchedules.find((m) => m.id === id);
+    
+    // Delete from localStorage
     const updated = allSchedules.filter((m) => m.id !== id);
     setAllSchedules(updated);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+
+    // Delete from Service Worker IndexedDB
+    if ("serviceWorker" in navigator && navigator.serviceWorker.controller && medicine) {
+      medicine.reminders.forEach((r) => {
+        const reminderId = `${id}_${r.date}_${r.time}`;
+        navigator.serviceWorker.controller.postMessage({
+          type: "DELETE_REMINDER",
+          payload: reminderId,
+        });
+      });
+    }
   };
 
-
-  // REMINDER CHECK
+  // REMINDER CHECK (for in-app popup when app is open)
   useEffect(() => {
     const it = setInterval(() => {
       const now = new Date();
@@ -310,31 +345,29 @@ if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
     return () => clearInterval(it);
   }, [allSchedules]);
 
-
   // UI
   return (
     <>
-
-    {showInstallButton && (
-  <button
-    onClick={handleInstallApp}
-    style={{
-      padding: "12px 20px",
-      backgroundColor: "#4e73df",
-      color: "white",
-      border: "none",
-      borderRadius: "8px",
-      marginBottom: "15px",
-      cursor: "pointer",
-    }}
-  >
-    📲 Install MedAlert App
-  </button>
-)}
+      {showInstallButton && (
+        <button
+          onClick={handleInstallApp}
+          style={{
+            padding: "12px 20px",
+            backgroundColor: "#4e73df",
+            color: "white",
+            border: "none",
+            borderRadius: "8px",
+            marginBottom: "15px",
+            cursor: "pointer",
+          }}
+        >
+          📲 Install MedAlert App
+        </button>
+      )}
 
       {popupReminder && (
         <div className="popup-reminder">
-         <div className={"popup-box" + (isClosing ? " closing" : "")}>
+          <div className={"popup-box" + (isClosing ? " closing" : "")}>
             <h3>⏰ Reminder!</h3>
 
             {popupReminder.imageUrl && (
@@ -343,26 +376,24 @@ if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
 
             <p>{popupReminder.medicineName}</p>
 
-           <button
-  className="primary-btn"
-  onClick={() => {
-    setIsClosing(true);      // animation start
-    stopTone();              // tone band
+            <button
+              className="primary-btn"
+              onClick={() => {
+                setIsClosing(true);
+                stopTone();
 
-    setTimeout(() => {
-      setPopupReminder(null); // popup hatao
-      setIsClosing(false);    // state reset
-    }, 200); // 200ms = CSS animation duration se match
-  }}
->
-  STOP
-</button>
+                setTimeout(() => {
+                  setPopupReminder(null);
+                  setIsClosing(false);
+                }, 200);
+              }}
+            >
+              STOP
+            </button>
 
-<button className="primary-btn snooze-btn" onClick={handleSnooze}>
-  ⏳ Snooze 5 min
-</button>
-
-
+            <button className="primary-btn snooze-btn" onClick={handleSnooze}>
+              ⏳ Snooze 5 min
+            </button>
           </div>
         </div>
       )}
@@ -372,7 +403,6 @@ if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
 
         {/* TOP SECTION */}
         <div className="top-bar">
-
           {/* Scan box */}
           <div className="scan-left-rectangle">
             <h3>📷 Scan / Click / Upload</h3>
@@ -395,10 +425,7 @@ if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
             <h4>🔔 Reminder Tone</h4>
 
             <label className="label-small">Select System Tone</label>
-            <select
-              value={selectedToneId}
-              onChange={(e) => setSelectedToneId(e.target.value)}
-            >
+            <select value={selectedToneId} onChange={(e) => setSelectedToneId(e.target.value)}>
               {systemTones.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.label}
@@ -413,7 +440,6 @@ if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
               {isTestPlaying ? "⛔ Stop Tone" : "▶ Test Tone"}
             </button>
           </div>
-
         </div>
 
         {/* MEDICINE FORM */}
@@ -446,8 +472,6 @@ if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
           />
         </div>
 
-
-          
         {form.imageUrl && (
           <div className="image-preview small-preview">
             <img src={form.imageUrl} alt="med" />
@@ -457,9 +481,6 @@ if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
         <div className="form-group">
           <label>Times per Day</label>
           <select value={form.timesPerDay} onChange={handleTimesPerDay}>
-            
-       
-
             {[1, 2, 3, 4, 5, 6].map((n) => (
               <option key={n} value={n}>
                 {n} times
@@ -472,11 +493,7 @@ if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
         {form.times.map((t, i) => (
           <div className="form-group" key={i}>
             <label>Time {i + 1}</label>
-            <input
-              type="time"
-              value={t}
-              onChange={(e) => handleTimeInput(i, e.target.value)}
-            />
+            <input type="time" value={t} onChange={(e) => handleTimeInput(i, e.target.value)} />
           </div>
         ))}
 
@@ -490,7 +507,6 @@ if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
             <h3>🗂️ All Medicines</h3>
             {allSchedules.map((m) => (
               <div key={m.id} className="medicine-item">
-
                 <h4>{m.medicineName}</h4>
 
                 {m.imageUrl && (
@@ -511,14 +527,12 @@ if ("serviceWorker" in navigator && navigator.serviceWorker.controller) {
                     </div>
                   ))}
                 </div>
-
               </div>
             ))}
           </div>
         )}
 
         <audio id="tone-player" src={currentTone?.src} preload="auto" />
-
       </div>
     </>
   );
