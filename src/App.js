@@ -180,18 +180,19 @@ const handleDismissClick = () => {
 
           <p className="role-text">Are you a:</p>
           <div className="role-buttons">
-            <button
-              className={`role-btn doctor ${a === "Doctor" ? "active" : ""}`}
-              onClick={() => b("Doctor")}
-            >
-              Doctor
-            </button>
-
+            {/* ✅ FIX: SWAPPED BUTTON ORDER - Patient LEFT, Doctor RIGHT */}
             <button
               className={`role-btn patient ${a === "Patient" ? "active" : ""}`}
               onClick={() => b("Patient")}
             >
               Patient
+            </button>
+
+            <button
+              className={`role-btn doctor ${a === "Doctor" ? "active" : ""}`}
+              onClick={() => b("Doctor")}
+            >
+              Doctor
             </button>
           </div>
 
@@ -222,7 +223,7 @@ const handleDismissClick = () => {
 
 <div className="feature-card">
   <h3>Maa Se Pehle Alert</h3>
-  <p>“Dawai le li?” — ab MedAlert bolega.</p>
+  <p>"Dawai le li?" — ab MedAlert bolega.</p>
   <div className="icon">👩‍👦</div>
 </div>
 
